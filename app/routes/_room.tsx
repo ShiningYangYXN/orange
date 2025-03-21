@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs } from '@remix-run/cloudflare'
 import { json } from '@remix-run/cloudflare'
 import { Outlet, useLoaderData, useParams } from '@remix-run/react'
-import { useObservableAsValue } from 'partytracks/react'
+import { useObservableAsValue, useValueAsObservable } from 'partytracks/react'
 import { useMemo, useState } from 'react'
 import { from, of, switchMap } from 'rxjs'
 import invariant from 'tiny-invariant'
@@ -14,6 +14,7 @@ import { usePeerConnection } from '~/hooks/usePeerConnection'
 import useRoom from '~/hooks/useRoom'
 import { type RoomContextType } from '~/hooks/useRoomContext'
 import { useRoomHistory } from '~/hooks/useRoomHistory'
+import { useStablePojo } from '~/hooks/useStablePojo'
 import useUserMedia from '~/hooks/useUserMedia'
 import type { TrackObject } from '~/utils/callsTypes'
 import { getIceServers } from '~/utils/getIceServers.server'
@@ -97,20 +98,11 @@ function RoomPreparation() {
 }
 
 function tryToGetDimensions(videoStreamTrack?: MediaStreamTrack) {
-	if (
-		videoStreamTrack === undefined ||
-		// TODO: Determine a better way to get dimensions in Firefox
-		// where this isn't API isn't supported. For now, Firefox will
-		// just not be constrained and scaled down by dimension scaling
-		// but the bandwidth and framerate constraints will still apply
-		// https://caniuse.com/?search=getCapabilities
-		videoStreamTrack.getCapabilities === undefined
-	) {
+	if (videoStreamTrack === undefined) {
 		return { height: 0, width: 0 }
 	}
-	const height = videoStreamTrack?.getCapabilities().height?.max ?? 0
-	const width = videoStreamTrack?.getCapabilities().width?.max ?? 0
-
+	const height = videoStreamTrack?.getSettings().height ?? 0
+	const width = videoStreamTrack?.getSettings().width ?? 0
 	return { height, width }
 }
 
@@ -160,43 +152,39 @@ function Room({ room, userMedia }: RoomProps) {
 		return Math.max(smallestDimension / maxWebcamQualityLevel, 1)
 	}, [maxWebcamQualityLevel, userMedia.videoStreamTrack, dataSaverMode])
 
+	const sendEncodings = useStablePojo<RTCRtpEncodingParameters[]>(
+		simulcastEnabled
+			? [
+					{
+						rid: 'b',
+						scaleResolutionDownBy: 2.0,
+						maxBitrate: 500_000,
+						maxFramerate: 24.0,
+						active: true,
+					},
+					{
+						rid: 'a',
+						maxBitrate: 1_300_000,
+						maxFramerate: 30.0,
+						active: !dataSaverMode,
+					},
+				]
+			: [
+					{
+						maxFramerate: maxWebcamFramerate,
+						maxBitrate: maxWebcamBitrate,
+						scaleResolutionDownBy,
+					},
+				]
+	)
+	const sendEncodings$ = useValueAsObservable(sendEncodings)
+
 	const pushedVideoTrack$ = useMemo(
 		() =>
 			partyTracks.push(userMedia.videoTrack$, {
-				sendEncodings:
-					simulcastEnabled && !dataSaverMode
-						? [
-								{
-									scaleResolutionDownBy: 1,
-									rid: 'a',
-									maxFramerate: maxWebcamFramerate,
-								},
-								{
-									scaleResolutionDownBy: 2,
-									rid: 'b',
-									maxFramerate: maxWebcamFramerate,
-								},
-								{
-									scaleResolutionDownBy: 4,
-									rid: 'c',
-									maxFramerate: maxWebcamFramerate,
-								},
-							]
-						: [
-								{
-									maxFramerate: maxWebcamFramerate,
-									maxBitrate: maxWebcamBitrate,
-									scaleResolutionDownBy,
-								},
-							],
+				sendEncodings$,
 			}),
-		[
-			partyTracks,
-			userMedia.videoTrack$,
-			maxWebcamFramerate,
-			scaleResolutionDownBy,
-			dataSaverMode,
-		]
+		[partyTracks, userMedia.videoTrack$, sendEncodings$]
 	)
 
 	const pushedVideoTrack = useObservableAsValue(pushedVideoTrack$)
@@ -204,7 +192,7 @@ function Room({ room, userMedia }: RoomProps) {
 	const pushedAudioTrack$ = useMemo(
 		() =>
 			partyTracks.push(userMedia.publicAudioTrack$, {
-				sendEncodings: [{ networkPriority: 'high' }],
+				sendEncodings$: of([{ networkPriority: 'high' }]),
 			}),
 		[partyTracks, userMedia.publicAudioTrack$]
 	)
