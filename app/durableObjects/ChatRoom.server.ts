@@ -296,6 +296,17 @@ export class ChatRoom extends Server<Env> {
 					await this.broadcastRoomState()
 					break
 				}
+				case 'callsApiHistoryEntry': {
+					const { entry, sessionId } = data
+					log({
+						eventName: 'clientNegotiationRecord',
+						connectionId: connection.id,
+						meetingId,
+						entry,
+						sessionId,
+					})
+					break
+				}
 				case 'directMessage': {
 					const { to, message } = data
 					const fromUser = await this.ctx.storage.get<User>(
