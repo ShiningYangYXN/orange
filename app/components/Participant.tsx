@@ -63,6 +63,7 @@ export const Participant = forwardRef<
 	const {
 		traceLink,
 		partyTracks,
+		dataSaverMode,
 		simulcastEnabled,
 		audioOnlyMode,
 		pinnedTileIds,
@@ -83,9 +84,13 @@ export const Participant = forwardRef<
 		isScreenShare ? undefined : user.tracks.audio
 	)
 	const shouldPullVideo = isScreenShare || (!isSelf && !audioOnlyMode)
+	let preferredRid: string | undefined = undefined
+	if (!isScreenShare && simulcastEnabled) {
+		preferredRid = dataSaverMode ? 'b' : 'a'
+	}
 	const pulledVideoTrack = usePulledVideoTrack(
 		shouldPullVideo ? user.tracks.video : undefined,
-		isScreenShare
+		preferredRid
 	)
 	const audioTrack = isSelf ? userMedia.audioStreamTrack : pulledAudioTrack
 	const videoTrack =
@@ -93,7 +98,7 @@ export const Participant = forwardRef<
 
 	useDeadPulledTrackMonitor(
 		user.tracks.video,
-		user.transceiverSessionId,
+		identity?.transceiverSessionId,
 		!!user.tracks.video,
 		videoTrack,
 		user.name
@@ -101,7 +106,7 @@ export const Participant = forwardRef<
 
 	useDeadPulledTrackMonitor(
 		user.tracks.audio,
-		user.transceiverSessionId,
+		identity?.transceiverSessionId,
 		!!user.tracks.audio,
 		audioTrack,
 		user.name
@@ -139,7 +144,7 @@ export const Participant = forwardRef<
 						'relative max-w-[--participant-max-width] rounded-xl'
 					)}
 				>
-					{!isScreenShare && (
+					{!isScreenShare && !user.tracks.videoEnabled && (
 						<div
 							className={cn(
 								'absolute inset-0 h-full w-full grid place-items-center'
@@ -260,6 +265,9 @@ export const Participant = forwardRef<
 											audioMid && `audio mid: ${audioMid}`,
 											videoMid && `video mid: ${videoMid}`,
 											`vid size: ${videoWidth}x${videoHeight}`,
+											!isSelf &&
+												preferredRid &&
+												`preferredRid: ${preferredRid}`,
 										]
 											.filter(Boolean)
 											.join(' ')}

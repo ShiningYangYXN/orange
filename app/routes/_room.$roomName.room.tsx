@@ -9,6 +9,7 @@ import {
 import { useEffect, useState } from 'react'
 import { useMount, useWindowSize } from 'react-use'
 import { AiButton } from '~/components/AiButton'
+import { ButtonLink } from '~/components/Button'
 import { CameraButton } from '~/components/CameraButton'
 import { CopyButton } from '~/components/CopyButton'
 import { HighPacketLossWarningsToast } from '~/components/HighPacketLossWarningsToast'
@@ -20,8 +21,9 @@ import { ParticipantLayout } from '~/components/ParticipantLayout'
 import { ParticipantsButton } from '~/components/ParticipantsMenu'
 import { PullAudioTracks } from '~/components/PullAudioTracks'
 import { RaiseHandButton } from '~/components/RaiseHandButton'
+import { SafetyNumberToast } from '~/components/SafetyNumberToast'
 import { ScreenshareButton } from '~/components/ScreenshareButton'
-import Toast from '~/components/Toast'
+import Toast, { useDispatchToast } from '~/components/Toast'
 import useBroadcastStatus from '~/hooks/useBroadcastStatus'
 import useIsSpeaking from '~/hooks/useIsSpeaking'
 import { useRoomContext } from '~/hooks/useRoomContext'
@@ -29,6 +31,7 @@ import { useShowDebugInfoShortcut } from '~/hooks/useShowDebugInfoShortcut'
 import useSounds from '~/hooks/useSounds'
 import useStageManager from '~/hooks/useStageManager'
 import { useUserJoinLeaveToasts } from '~/hooks/useUserJoinLeaveToasts'
+import { dashboardLogsLink } from '~/utils/dashboardLogsLink'
 import getUsername from '~/utils/getUsername.server'
 import isNonNullable from '~/utils/isNonNullable'
 
@@ -47,6 +50,7 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
 		hasAiCredentials: Boolean(
 			context.env.OPENAI_API_TOKEN && context.env.OPENAI_MODEL_ENDPOINT
 		),
+		dashboardDebugLogsBaseUrl: context.env.DASHBOARD_WORKER_URL,
 	})
 }
 
@@ -72,20 +76,31 @@ export default function Room() {
 }
 
 function JoinedRoom({ bugReportsEnabled }: { bugReportsEnabled: boolean }) {
-	const { hasDb, hasAiCredentials } = useLoaderData<typeof loader>()
+	const { hasDb, hasAiCredentials, dashboardDebugLogsBaseUrl } =
+		useLoaderData<typeof loader>()
 	const {
 		userMedia,
 		partyTracks,
 		pushedTracks,
 		showDebugInfo,
 		pinnedTileIds,
-		room: {
-			otherUsers,
-			websocket,
-			identity,
-			roomState: { meetingId },
-		},
+		room,
+		e2eeSafetyNumber,
+		e2eeOnJoin,
 	} = useRoomContext()
+	const {
+		otherUsers,
+		websocket,
+		identity,
+		roomState: { meetingId },
+	} = room
+
+	// only want this evaluated once upon mounting
+	const [firstUser] = useState(otherUsers.length === 0)
+
+	useEffect(() => {
+		e2eeOnJoin(firstUser)
+	}, [e2eeOnJoin, firstUser])
 
 	useShowDebugInfoShortcut()
 
@@ -136,6 +151,16 @@ function JoinedRoom({ bugReportsEnabled }: { bugReportsEnabled: boolean }) {
 	)
 
 	const gridGap = 12
+	const dispatchToast = useDispatchToast()
+
+	useEffect(() => {
+		if (e2eeSafetyNumber) {
+			dispatchToast(
+				<SafetyNumberToast safetyNumber={e2eeSafetyNumber.slice(0, 8)} />,
+				{ duration: Infinity, id: 'e2ee-safety-number' }
+			)
+		}
+	}, [e2eeSafetyNumber, dispatchToast])
 
 	return (
 		<PullAudioTracks
@@ -187,6 +212,25 @@ function JoinedRoom({ bugReportsEnabled }: { bugReportsEnabled: boolean }) {
 					/>
 					{showDebugInfo && meetingId && (
 						<CopyButton contentValue={meetingId}>Meeting Id</CopyButton>
+					)}
+					{showDebugInfo && meetingId && dashboardDebugLogsBaseUrl && (
+						<ButtonLink
+							className="text-xs"
+							displayType="secondary"
+							to={dashboardLogsLink(dashboardDebugLogsBaseUrl, [
+								{
+									id: '2',
+									key: 'meetingId',
+									type: 'string',
+									value: meetingId,
+									operation: 'eq',
+								},
+							])}
+							target="_blank"
+							rel="noreferrer"
+						>
+							Meeting Logs
+						</ButtonLink>
 					)}
 				</div>
 			</div>

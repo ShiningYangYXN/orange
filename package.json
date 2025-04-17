@@ -2,6 +2,7 @@
 	"name": "@cloudflare/orange-meets",
 	"scripts": {
 		"build": "remix build",
+		"build:e2ee-worker": "./rust-mls-worker/build.sh",
 		"lint": "prettier --check . && eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint --max-warnings=0 .",
 		"dev": "remix dev --manual -c \"npm start\"",
 		"start": "wrangler dev ./build/index.js ${WRANGLER_ARGS:-}",
@@ -54,7 +55,7 @@
 		"nanoid": "^5.0.7",
 		"partyserver": "^0.0.57",
 		"partysocket": "^1.0.2",
-		"partytracks": "^0.0.31",
+		"partytracks": "^0.0.33",
 		"react": "^18.3.1",
 		"react-dom": "^18.3.1",
 		"react-flip-toolkit": "^7.2.4",

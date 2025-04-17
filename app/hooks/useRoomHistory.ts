@@ -1,5 +1,7 @@
 import type { ApiHistoryEntry, PartyTracks } from 'partytracks/client'
+import { useObservableAsValue } from 'partytracks/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ClientMessage } from '~/types/Messages'
 import type useRoom from './useRoom'
 
 interface UserSession {
@@ -21,17 +23,28 @@ export function useRoomHistory(
 		UserSession[]
 	>([])
 	const sessionIdsRef = useRef(new Set<string>())
+	const { sessionId } = useObservableAsValue(partyTracks.session$) ?? {}
 
 	useEffect(() => {
 		const handleHistory = () => {
 			setApiHistory(partyTracks.history.entries)
+			const entry = partyTracks.history.entries.at(-1)
+			if (entry) {
+				room.websocket.send(
+					JSON.stringify({
+						type: 'callsApiHistoryEntry',
+						entry,
+						sessionId,
+					} satisfies ClientMessage)
+				)
+			}
 		}
 		partyTracks.history.addEventListener('logentry', handleHistory)
 
 		return () => {
 			partyTracks.history.removeEventListener('logentry', handleHistory)
 		}
-	}, [partyTracks])
+	}, [partyTracks, sessionId])
 
 	useEffect(() => {
 		room.otherUsers.forEach((user) => {
